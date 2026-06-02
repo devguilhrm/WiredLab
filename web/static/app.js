@@ -1,5 +1,6 @@
 const HOST_RE = /IP:\s+([0-9a-fA-F:.]+)\s+MAC:\s+([0-9a-fA-F:-]{17})(?:\s+Hostname:\s+([^\s]+))?(?:\s+Vendor:\s+(.+))?/;
 const DNS_RE = /^(?=.{1,253}$)([A-Za-z0-9_-]+\.)+[A-Za-z]{2,}\.?$/;
+const DNS_QUERY_RE = /DNSQuery\s+SrcIP:\s+(\S+)\s+SrcMAC:\s+([0-9a-fA-F:-]{17})\s+Transport:\s+(\S+)\s+Domain:\s+(.+)/;
 
 const state = {
   tools: {},
@@ -26,6 +27,7 @@ const el = {
   refreshInterfaces: document.getElementById("refreshInterfaces"),
   clearDashboard: document.getElementById("clearDashboard"),
   clearConsole: document.getElementById("clearConsole"),
+  deviceFilter: document.getElementById("deviceFilter"),
   runState: document.getElementById("runState"),
   hostsMetric: document.getElementById("hostsMetric"),
   dnsMetric: document.getElementById("dnsMetric"),
@@ -167,6 +169,12 @@ function parseOutput(text, tool) {
       continue;
     }
 
+    const dnsQuery = DNS_QUERY_RE.exec(line);
+    if (dnsQuery) {
+      recordDnsQuery(dnsQuery[1], dnsQuery[2], dnsQuery[3], dnsQuery[4], tool);
+      continue;
+    }
+
     if (tool === "dns_scan" && DNS_RE.test(line)) {
       recordDns(line.replace(/\.$/, "").toLowerCase(), tool);
     }
@@ -195,6 +203,18 @@ function recordDns(domain, tool) {
   updateMetrics();
 }
 
+function recordDnsQuery(srcIp, srcMac, transport, domain, tool) {
+  const normalized = domain.replace(/\.$/, "").toLowerCase();
+  const key = `${srcIp}|${srcMac.toLowerCase()}|${normalized}`;
+  if (state.dns.has(key)) {
+    return;
+  }
+
+  state.dns.add(key);
+  addEvent("DNS", normalized, srcMac, `${srcIp} | ${transport}`, tool);
+  updateMetrics();
+}
+
 function addEvent(kind, target, mac, info, source) {
   const tr = document.createElement("tr");
   const values = [kind, target, mac, info, source || "", new Date().toLocaleTimeString()];
@@ -206,6 +226,7 @@ function addEvent(kind, target, mac, info, source) {
   }
 
   el.eventsBody.prepend(tr);
+  applyDeviceFilter();
 }
 
 function updateMetrics() {
@@ -228,6 +249,15 @@ function clearConsole() {
   el.console.textContent = "";
 }
 
+function applyDeviceFilter() {
+  const needle = el.deviceFilter.value.trim().toLowerCase();
+
+  for (const row of el.eventsBody.querySelectorAll("tr")) {
+    const text = row.textContent.toLowerCase();
+    row.hidden = Boolean(needle) && !text.includes(needle);
+  }
+}
+
 el.tool.addEventListener("change", updateFields);
 el.runBtn.addEventListener("click", runTool);
 el.stopBtn.addEventListener("click", stopTool);
@@ -235,6 +265,7 @@ el.killBtn.addEventListener("click", killTool);
 el.refreshInterfaces.addEventListener("click", loadInterfaces);
 el.clearDashboard.addEventListener("click", clearDashboard);
 el.clearConsole.addEventListener("click", clearConsole);
+el.deviceFilter.addEventListener("input", applyDeviceFilter);
 
 loadTools();
 loadInterfaces();

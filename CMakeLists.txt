@@ -29,6 +29,7 @@ endfunction()
 
 add_network_tool(arp_scan arp_scan.cpp ${NETWORK_COMMON_SOURCES})
 add_network_tool(arp_spoofing arp_spoofing.cpp ${NETWORK_COMMON_SOURCES})
+add_network_tool(dns_monitor dns_monitor.cpp ${NETWORK_COMMON_SOURCES})
 add_network_tool(dns_scan dns_scan.cpp ${NETWORK_COMMON_SOURCES})
 add_network_tool(icmp6_scan icmp6_scan.cpp ${NETWORK_COMMON_SOURCES})
 add_network_tool(ndp_spoofing ndp_spoofing.cpp ${NETWORK_COMMON_SOURCES})

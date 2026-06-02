@@ -23,6 +23,7 @@ BIN_DIR = ROOT / "Bin"
 TOOLS = {
     "arp_scan": {"label": "ARP Scan", "interface": True, "fields": []},
     "icmp6_scan": {"label": "ICMPv6 Scan", "interface": True, "fields": []},
+    "dns_monitor": {"label": "DNS Monitor All Devices", "interface": True, "fields": []},
     "dns_scan": {"label": "DNS Capture", "interface": True, "fields": ["mac"]},
     "netlink": {"label": "Netlink Routes", "interface": False, "fields": []},
     "dns_rr": {"label": "DNS Query Demo", "interface": True, "fields": []},

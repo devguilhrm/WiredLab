@@ -65,11 +65,19 @@ h2 {
   align-self: start;
 }
 
-.section-title, .status {
+.section-title, .status, .actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.filter {
+  width: min(360px, 42vw);
 }
 
 label {

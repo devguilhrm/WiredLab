@@ -12,6 +12,7 @@ TOOLS=(
   dhcp_server
   dhcpv6
   dns_rr
+  dns_monitor
   dns_scan
   icmp6_scan
   ndp_spoofing

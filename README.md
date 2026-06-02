@@ -42,6 +42,7 @@ Este projeto serve como um laboratorio de redes em C++ para:
 | --- | --- |
 | `arp_scan.cpp` | Varre a sub-rede IPv4 da interface usando requisicoes ARP. Mostra IP, MAC, hostname via reverse DNS/PTR quando disponivel e fabricante via `api.macvendors.com`. |
 | `icmp6_scan.cpp` | Envia ICMPv6 Echo Request para `ff02::1` e lista hosts IPv6 que respondem. Tambem tenta identificar fabricante pelo MAC. |
+| `dns_monitor.cpp` | Monitora consultas DNS visiveis na interface e imprime IP/MAC de origem, transporte e dominio consultado. |
 | `dns_scan.cpp` | Captura trafego DNS de um MAC informado e imprime os nomes consultados. Suporta DNS sobre UDP e TCP em IPv4/IPv6. |
 | `arp_spoofing.cpp` | Faz ARP spoofing entre gateway e host informados. Ao parar, tenta restaurar as entradas ARP corretas. |
 | `ndp_spoofing.cpp` | Faz spoofing NDP/Neighbor Advertisement em IPv6 entre gateway e host. Ao parar, tenta restaurar as entradas corretas. |
@@ -219,6 +220,8 @@ O dashboard web oferece:
 
 - selecao de interface e ferramenta;
 - execucao de ARP scan, ICMPv6 scan, DNS capture, Netlink e demonstracoes DHCP/DNS;
+- monitor DNS em tempo real para todos os dispositivos visiveis na interface;
+- filtro de eventos por IP, MAC, dominio ou informacao do dispositivo;
 - controles para parar ou terminar o processo atual;
 - console ao vivo via Server-Sent Events;
 - cards de hosts, DNS, execucoes e alertas;
@@ -240,6 +243,7 @@ Os binarios existentes estao em `Bin/`, mas o codigo usa caminhos relativos como
 
 - `arp_scan.cpp` e `icmp6_scan.cpp` fazem consulta externa para identificar fabricantes de MAC. Isso exige internet e pode ser limitado pela API.
 - `arp_scan.cpp` tenta resolver hostname por reverse DNS/PTR. O nome so aparece se o roteador, DNS local ou arquivo de hosts tiver essa informacao.
+- `dns_monitor.cpp` mostra requisicoes DNS em tempo real, mas apenas do trafego visivel para a interface do servidor. Em rede com switch comum, para observar todos os dispositivos pode ser necessario usar o servidor como gateway/DNS, configurar espelhamento de porta, bridge/AP ou capturar no ponto por onde o trafego passa.
 - `arp_spoofing.cpp` e `ndp_spoofing.cpp` alteram temporariamente a percepcao de vizinhanca dos hosts envolvidos.
 - `dhcp.cpp` pode consumir leases do servidor DHCP e causar indisponibilidade para novos clientes.
 - `release_aclients.cpp` pode liberar o lease DHCP de um cliente real selecionado.
