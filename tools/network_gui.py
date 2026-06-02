@@ -23,7 +23,11 @@ from tkinter import messagebox, ttk
 ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "Bin"
 
-HOST_RE = re.compile(r"IP:\s+([0-9a-fA-F:.]+)\s+MAC:\s+([0-9a-fA-F:-]{17})(?:\s+Vendor:\s+(.+))?")
+HOST_RE = re.compile(
+    r"IP:\s+([0-9a-fA-F:.]+)\s+MAC:\s+([0-9a-fA-F:-]{17})"
+    r"(?:\s+Hostname:\s+([^\s]+))?"
+    r"(?:\s+Vendor:\s+(.+))?"
+)
 DNS_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9_-]+\.)+[A-Za-z]{2,}\.?$")
 
 
@@ -463,21 +467,22 @@ class NetworkGui(tk.Tk):
 
             host_match = HOST_RE.search(line)
             if host_match:
-                ip, mac, vendor = host_match.groups()
-                self.record_host(ip, mac, vendor or "")
+                ip, mac, hostname, vendor = host_match.groups()
+                self.record_host(ip, mac, hostname or "", vendor or "")
                 continue
 
             if self.current_tool == "dns_scan" and DNS_RE.match(line):
                 self.record_dns(line)
 
-    def record_host(self, ip: str, mac: str, vendor: str):
+    def record_host(self, ip: str, mac: str, hostname: str, vendor: str):
         key = (ip, mac.lower())
         if key in self.hosts_seen:
             return
 
         self.hosts_seen.add(key)
         self.host_count_var.set(str(len(self.hosts_seen)))
-        self.add_event("Host", ip, mac, vendor, self.current_tool or "scan")
+        info = " | ".join(value for value in (hostname, vendor) if value)
+        self.add_event("Host", ip, mac, info, self.current_tool or "scan")
 
     def record_dns(self, domain: str):
         normalized = domain.rstrip(".").lower()

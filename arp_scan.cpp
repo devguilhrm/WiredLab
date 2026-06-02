@@ -12,6 +12,7 @@
 #include <queue>
 
 #include <curl/curl.h>
+#include <netdb.h>
 
 #define CURL_BUFFER_LENGTH 260
 
@@ -28,6 +29,26 @@ struct HOST{
 struct ERROR{
 	char s[260];
 };
+
+bool resolve_hostname(uint32_t iaddr,char* hostname,size_t hostname_len){
+	if(!hostname || !hostname_len) return false;
+
+	sockaddr_in addr = {0};
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = iaddr;
+
+	int result = getnameinfo(
+		(sockaddr*)&addr,
+		sizeof(addr),
+		hostname,
+		hostname_len,
+		nullptr,
+		0,
+		NI_NAMEREQD
+	);
+
+	return result == 0;
+}
 
 struct Ctx{
 	Interface interface;
@@ -234,6 +255,7 @@ size_t cb(char *data,size_t size,size_t n,void *userdata){
 int main(int n_args,char **args){
 
 	Ctx ctx;
+	bool resolve_hostnames = !cli_has_arg(n_args,args,"--no-hostnames");
 
 	if(!cli_read_interface(ctx.interface,n_args,args,"--interface","Interface Name: ")){
 		return 1;
@@ -307,6 +329,11 @@ int main(int n_args,char **args){
 		for(HOST& host : ctx.hosts){
 			printf("IP: %s ",sprint_ipv4(&host.iaddr));
 			printf("MAC: %s ",sprint_mac(&host.haddr));
+
+			char hostname[NI_MAXHOST] = {0};
+			if(resolve_hostnames && resolve_hostname(host.iaddr,hostname,sizeof(hostname))){
+				printf("Hostname: %s ",hostname);
+			}
 
 			snprintf(curl_buffer,sizeof(curl_buffer),"%s/%s",MAC_FIND_URL,sprint_mac(&host.haddr));
 

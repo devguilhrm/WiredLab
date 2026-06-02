@@ -40,7 +40,7 @@ Este projeto serve como um laboratorio de redes em C++ para:
 
 | Arquivo | Funcao |
 | --- | --- |
-| `arp_scan.cpp` | Varre a sub-rede IPv4 da interface usando requisicoes ARP. Mostra IP, MAC e, quando possivel, fabricante via `api.macvendors.com`. |
+| `arp_scan.cpp` | Varre a sub-rede IPv4 da interface usando requisicoes ARP. Mostra IP, MAC, hostname via reverse DNS/PTR quando disponivel e fabricante via `api.macvendors.com`. |
 | `icmp6_scan.cpp` | Envia ICMPv6 Echo Request para `ff02::1` e lista hosts IPv6 que respondem. Tambem tenta identificar fabricante pelo MAC. |
 | `dns_scan.cpp` | Captura trafego DNS de um MAC informado e imprime os nomes consultados. Suporta DNS sobre UDP e TCP em IPv4/IPv6. |
 | `arp_spoofing.cpp` | Faz ARP spoofing entre gateway e host informados. Ao parar, tenta restaurar as entradas ARP corretas. |
@@ -239,6 +239,7 @@ Os binarios existentes estao em `Bin/`, mas o codigo usa caminhos relativos como
 ## Observacoes importantes
 
 - `arp_scan.cpp` e `icmp6_scan.cpp` fazem consulta externa para identificar fabricantes de MAC. Isso exige internet e pode ser limitado pela API.
+- `arp_scan.cpp` tenta resolver hostname por reverse DNS/PTR. O nome so aparece se o roteador, DNS local ou arquivo de hosts tiver essa informacao.
 - `arp_spoofing.cpp` e `ndp_spoofing.cpp` alteram temporariamente a percepcao de vizinhanca dos hosts envolvidos.
 - `dhcp.cpp` pode consumir leases do servidor DHCP e causar indisponibilidade para novos clientes.
 - `release_aclients.cpp` pode liberar o lease DHCP de um cliente real selecionado.
