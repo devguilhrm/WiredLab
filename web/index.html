@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WiredLab Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>WiredLab</h1>
+      <p>Dashboard web para operar as ferramentas de rede no Ubuntu Server.</p>
+    </div>
+    <div class="status">
+      <span id="runState" class="pill">Idle</span>
+      <button id="stopBtn" class="secondary">Parar</button>
+      <button id="killBtn" class="danger ghost">Terminar</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <div class="section-title">
+        <h2>Operacao</h2>
+        <button id="refreshInterfaces" class="secondary">Interfaces</button>
+      </div>
+
+      <label for="interface">Interface</label>
+      <select id="interface"></select>
+
+      <label for="tool">Ferramenta</label>
+      <select id="tool"></select>
+
+      <div id="fieldMac" class="field hidden">
+        <label for="mac">MAC alvo</label>
+        <input id="mac" placeholder="aa-bb-cc-dd-ee-ff">
+      </div>
+
+      <div id="fieldGateway" class="field hidden">
+        <label for="gateway">Gateway</label>
+        <input id="gateway" placeholder="192.168.1.1 ou IPv6">
+      </div>
+
+      <div id="fieldHost" class="field hidden">
+        <label for="host">Host</label>
+        <input id="host" placeholder="192.168.1.20 ou IPv6">
+      </div>
+
+      <label class="check">
+        <input id="authorized" type="checkbox">
+        Confirmo uso em rede autorizada
+      </label>
+
+      <button id="runBtn" class="primary">Executar</button>
+
+      <p class="hint">
+        Configure capabilities com <code>sudo bash ./scripts/install_privileges.sh sudo</code>
+        para executar sem abrir sessao como root.
+      </p>
+    </section>
+
+    <section class="workspace">
+      <div class="metrics">
+        <article class="metric">
+          <span>Hosts</span>
+          <strong id="hostsMetric">0</strong>
+        </article>
+        <article class="metric">
+          <span>DNS</span>
+          <strong id="dnsMetric">0</strong>
+        </article>
+        <article class="metric">
+          <span>Execucoes</span>
+          <strong id="runsMetric">0</strong>
+        </article>
+        <article class="metric">
+          <span>Alertas</span>
+          <strong id="alertsMetric">0</strong>
+        </article>
+      </div>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>Eventos</h2>
+          <button id="clearDashboard" class="secondary">Limpar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>IP/Dominio</th>
+                <th>MAC</th>
+                <th>Info</th>
+                <th>Fonte</th>
+                <th>Hora</th>
+              </tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel console-panel">
+        <div class="section-title">
+          <h2>Console</h2>
+          <button id="clearConsole" class="secondary">Limpar</button>
+        </div>
+        <pre id="console"></pre>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

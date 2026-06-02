@@ -27,6 +27,7 @@ Este projeto serve como um laboratorio de redes em C++ para:
 |-- Bin/                  # Binarios Linux ja gerados e arquivos de clientes DHCP
 |-- scripts/              # Scripts de permissao/operacao no Linux
 |-- tools/                # Interface grafica e utilitarios de operacao
+|-- web/                  # Dashboard web para Ubuntu Server sem interface grafica
 |-- CMakeLists.txt        # Build centralizado do projeto
 |-- *_scan.cpp            # Ferramentas de varredura/captura
 |-- *_spoofing.cpp        # Demonstracoes de spoofing ARP/NDP
@@ -58,7 +59,7 @@ O projeto agora esta organizado em tres camadas:
 
 - Nucleo C++: `Include/Packet.h`, `Source/Packet.cpp`, `Include/Utils.h` e `Source/Utils.cpp` concentram montagem, leitura, formatacao de pacotes e descoberta de interfaces.
 - Ferramentas: cada arquivo `*.cpp` na raiz e um executavel pequeno que usa o nucleo para uma tarefa especifica.
-- Orquestracao: `CMakeLists.txt` compila todos os executaveis e `tools/network_gui.py` fornece uma interface grafica para configurar parametros, executar binarios e acompanhar a saida.
+- Orquestracao: `CMakeLists.txt` compila todos os executaveis, `tools/network_gui.py` fornece uma interface Tkinter para ambientes com desktop e `web/server.py` fornece um dashboard web para Ubuntu Server sem interface grafica.
 
 O header `Include/CLI.h` centraliza leitura de argumentos como `--interface`, `--gateway`, `--host` e `--mac`. Com isso, as ferramentas continuam funcionando em modo interativo, mas tambem podem ser chamadas por scripts ou pela GUI. A GUI tambem possui um dashboard que transforma parte da saida textual dos binarios em indicadores e eventos tabulares.
 
@@ -183,6 +184,47 @@ Para comandos que exigem privilegio, ha duas opcoes:
 - Marcar `Elevar via pkexec` para a GUI pedir autenticacao grafica antes de executar os binarios.
 
 Se `pkexec` nao estiver disponivel, execute os binarios manualmente com `sudo` ou configure capabilities com o script acima.
+
+## Dashboard web para Ubuntu Server
+
+Em servidores sem interface grafica, use o dashboard web em vez da GUI Tkinter. Ele usa apenas a biblioteca padrao do Python e executa os binarios em `Bin/` com argumentos controlados.
+
+Depois de compilar:
+
+```bash
+cmake -S . -B build
+cmake --build build
+sudo bash ./scripts/install_privileges.sh sudo
+```
+
+Execute localmente no servidor:
+
+```bash
+python3 web/server.py
+```
+
+Para acessar de outro computador na mesma rede, por exemplo pelo navegador do Windows:
+
+```bash
+python3 web/server.py --host 0.0.0.0 --port 8080
+```
+
+Depois abra:
+
+```text
+http://IP_DO_SERVIDOR:8080
+```
+
+O dashboard web oferece:
+
+- selecao de interface e ferramenta;
+- execucao de ARP scan, ICMPv6 scan, DNS capture, Netlink e demonstracoes DHCP/DNS;
+- controles para parar ou terminar o processo atual;
+- console ao vivo via Server-Sent Events;
+- cards de hosts, DNS, execucoes e alertas;
+- tabela de eventos extraida da saida dos binarios.
+
+Por seguranca, o servidor web nao e um terminal remoto generico: ele aceita apenas ferramentas conhecidas do projeto e argumentos esperados. Ainda assim, exponha `--host 0.0.0.0` apenas em rede confiavel.
 
 ## Arquivos de clientes DHCP
 
