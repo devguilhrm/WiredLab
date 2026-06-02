@@ -24,15 +24,7 @@ TOOLS = {
     "arp_scan": {"label": "ARP Scan", "interface": True, "fields": []},
     "icmp6_scan": {"label": "ICMPv6 Scan", "interface": True, "fields": []},
     "dns_monitor": {"label": "DNS Monitor All Devices", "interface": True, "fields": []},
-    "dns_scan": {"label": "DNS Capture", "interface": True, "fields": ["mac"]},
-    "netlink": {"label": "Netlink Routes", "interface": False, "fields": []},
-    "dns_rr": {"label": "DNS Query Demo", "interface": True, "fields": []},
-    "dhcpv6": {"label": "DHCPv6 Demo", "interface": True, "fields": []},
-    "dhcp_server": {"label": "DHCP Server Bind Demo", "interface": True, "fields": []},
-    "release_fclients": {"label": "Release False Clients", "interface": True, "fields": []},
-    "arp_spoofing": {"label": "ARP Spoofing", "interface": True, "fields": ["gateway", "host"], "dangerous": True},
-    "ndp_spoofing": {"label": "NDP Spoofing", "interface": True, "fields": ["gateway", "host"], "dangerous": True},
-    "dhcp": {"label": "DHCP Starvation", "interface": True, "fields": [], "dangerous": True},
+    "netlink": {"label": "Network Routes", "interface": False, "fields": []},
 }
 
 

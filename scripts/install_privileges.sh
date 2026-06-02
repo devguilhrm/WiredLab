@@ -7,18 +7,9 @@ GROUP_NAME="${1:-}"
 
 TOOLS=(
   arp_scan
-  arp_spoofing
-  dhcp
-  dhcp_server
-  dhcpv6
-  dns_rr
   dns_monitor
-  dns_scan
   icmp6_scan
-  ndp_spoofing
   netlink
-  release_aclients
-  release_fclients
 )
 
 if [[ "$(id -u)" -ne 0 ]]; then

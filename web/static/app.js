@@ -88,7 +88,7 @@ async function runTool() {
   const tool = el.tool.value;
   const spec = state.tools[tool] || {};
 
-  if (spec.dangerous && !el.authorized.checked) {
+  if (spec.dangerous && el.authorized && !el.authorized.checked) {
     alert("Confirme uso em rede autorizada antes de executar esta ferramenta.");
     return;
   }

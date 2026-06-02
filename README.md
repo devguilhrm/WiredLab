@@ -2,7 +2,7 @@
 
 Projeto em C++ para estudo e teste de protocolos de rede em Linux. O codigo constroi, envia, recebe e interpreta pacotes de baixo nivel usando sockets `AF_PACKET`, filtros BPF e consultas Netlink/RTNETLINK.
 
-Ele cobre principalmente Ethernet, ARP, IPv4, IPv6, ICMPv6, UDP, TCP, DNS, DHCP e NDP. Algumas ferramentas sao defensivas ou de inventario, como varredura ARP/ICMPv6 e captura de consultas DNS. Outras sao ofensivas ou disruptivas, como ARP spoofing, NDP spoofing e DHCP starvation.
+O foco atual do dashboard web e inventario e monitoramento: varredura IPv4 com ARP, varredura IPv6 com ICMPv6, monitoramento DNS em tempo real e visualizacao de rotas de rede.
 
 > Use somente em redes proprias, laboratorios ou ambientes onde voce tem autorizacao explicita. Algumas ferramentas podem causar indisponibilidade, alterar tabelas ARP/NDP ou liberar leases DHCP.
 
@@ -12,10 +12,8 @@ Este projeto serve como um laboratorio de redes em C++ para:
 
 - Descobrir hosts IPv4 na rede local com ARP.
 - Descobrir hosts IPv6 no link local com ICMPv6 multicast.
-- Observar consultas DNS feitas por um dispositivo especifico.
-- Demonstrar ARP spoofing e NDP spoofing entre um host e o gateway.
-- Demonstrar DHCP starvation e gerenciamento/liberacao dos leases gerados.
-- Montar e imprimir pacotes DNS/DHCP/DHCPv6 manualmente.
+- Observar consultas DNS visiveis na interface em tempo real.
+- Filtrar eventos DNS por IP, MAC, dominio ou informacao do dispositivo.
 - Consultar informacoes do kernel Linux via Netlink.
 
 ## Estrutura
@@ -43,6 +41,12 @@ Este projeto serve como um laboratorio de redes em C++ para:
 | `arp_scan.cpp` | Varre a sub-rede IPv4 da interface usando requisicoes ARP. Mostra IP, MAC, hostname via reverse DNS/PTR quando disponivel e fabricante via `api.macvendors.com`. |
 | `icmp6_scan.cpp` | Envia ICMPv6 Echo Request para `ff02::1` e lista hosts IPv6 que respondem. Tambem tenta identificar fabricante pelo MAC. |
 | `dns_monitor.cpp` | Monitora consultas DNS visiveis na interface e imprime IP/MAC de origem, transporte e dominio consultado. |
+| `netlink.cpp` | Consulta e imprime informacoes de rotas, interfaces e enderecos via Netlink/RTNETLINK. |
+
+As ferramentas abaixo continuam no repositorio como laboratorio/experimentos, mas nao aparecem no dashboard web funcional por padrao:
+
+| Arquivo | Funcao |
+| --- | --- |
 | `dns_scan.cpp` | Captura trafego DNS de um MAC informado e imprime os nomes consultados. Suporta DNS sobre UDP e TCP em IPv4/IPv6. |
 | `arp_spoofing.cpp` | Faz ARP spoofing entre gateway e host informados. Ao parar, tenta restaurar as entradas ARP corretas. |
 | `ndp_spoofing.cpp` | Faz spoofing NDP/Neighbor Advertisement em IPv6 entre gateway e host. Ao parar, tenta restaurar as entradas corretas. |
@@ -52,7 +56,6 @@ Este projeto serve como um laboratorio de redes em C++ para:
 | `dhcpv6.cpp` | Demonstra a montagem de um DHCPv6 Information Request. Aceita `--interface`, mas ainda contem enderecos IPv6 fixos no codigo. |
 | `dhcp_server.cpp` | Teste minimo de bind na porta de servidor DHCP. Aceita `--interface`. |
 | `dns_rr.cpp` | Demonstra consulta DNS via TCP/IPv6 para root server, consultando `www.gov.br`. Possui valores fixos no codigo. |
-| `netlink.cpp` | Consulta e imprime informacoes de rotas, interfaces e enderecos via Netlink/RTNETLINK. |
 
 ## Arquitetura atual
 
@@ -219,7 +222,7 @@ http://IP_DO_SERVIDOR:8080
 O dashboard web oferece:
 
 - selecao de interface e ferramenta;
-- execucao de ARP scan, ICMPv6 scan, DNS capture, Netlink e demonstracoes DHCP/DNS;
+- execucao de ARP Scan, ICMPv6 Scan, DNS Monitor All Devices e Network Routes;
 - monitor DNS em tempo real para todos os dispositivos visiveis na interface;
 - filtro de eventos por IP, MAC, dominio ou informacao do dispositivo;
 - controles para parar ou terminar o processo atual;
