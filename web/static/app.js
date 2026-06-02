@@ -1,5 +1,4 @@
 const HOST_RE = /IP:\s+([0-9a-fA-F:.]+)\s+MAC:\s+([0-9a-fA-F:-]{17})(?:\s+Hostname:\s+([^\s]+))?(?:\s+Vendor:\s+(.+))?/;
-const DNS_RE = /^(?=.{1,253}$)([A-Za-z0-9_-]+\.)+[A-Za-z]{2,}\.?$/;
 const DNS_QUERY_RE = /DNSQuery\s+SrcIP:\s+(\S+)\s+SrcMAC:\s+([0-9a-fA-F:-]{17})\s+Transport:\s+(\S+)\s+Domain:\s+(.+)/;
 
 const state = {
@@ -175,9 +174,6 @@ function parseOutput(text, tool) {
       continue;
     }
 
-    if (tool === "dns_scan" && DNS_RE.test(line)) {
-      recordDns(line.replace(/\.$/, "").toLowerCase(), tool);
-    }
   }
 }
 
@@ -190,16 +186,6 @@ function recordHost(ip, mac, hostname, vendor, tool) {
   state.hosts.add(key);
   const info = [hostname, vendor].filter(Boolean).join(" | ");
   addEvent("Host", ip, mac, info, tool);
-  updateMetrics();
-}
-
-function recordDns(domain, tool) {
-  if (state.dns.has(domain)) {
-    return;
-  }
-
-  state.dns.add(domain);
-  addEvent("DNS", domain, "", "query", tool);
   updateMetrics();
 }
 

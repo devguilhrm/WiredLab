@@ -3,13 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import queue
-import shutil
-import signal
-import subprocess
+import sys
 import threading
-import time
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,21 +14,38 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = ROOT / "web"
-BIN_DIR = ROOT / "Bin"
+sys.path.insert(0, str(ROOT))
+
+from wiredlab.interfaces import interface_names  # noqa: E402
+from wiredlab.scanners import arp, dns, icmp6, routes  # noqa: E402
 
 
 TOOLS = {
     "arp_scan": {"label": "ARP Scan", "interface": True, "fields": []},
     "icmp6_scan": {"label": "ICMPv6 Scan", "interface": True, "fields": []},
     "dns_monitor": {"label": "DNS Monitor All Devices", "interface": True, "fields": []},
-    "netlink": {"label": "Network Routes", "interface": False, "fields": []},
+    "routes": {"label": "Network Routes", "interface": False, "fields": []},
 }
+
+
+def run_tool(tool: str, interface: str, stop_event: threading.Event) -> Iterator[str]:
+    if tool == "arp_scan":
+        yield from arp.scan(interface, stop_event)
+    elif tool == "icmp6_scan":
+        yield from icmp6.scan(interface, stop_event)
+    elif tool == "dns_monitor":
+        yield from dns.monitor(interface, stop_event)
+    elif tool == "routes":
+        yield from routes.inspect(stop_event)
+    else:
+        raise ValueError("Unknown tool")
 
 
 class AppState:
     def __init__(self):
         self.lock = threading.Lock()
-        self.process: subprocess.Popen[str] | None = None
+        self.worker: threading.Thread | None = None
+        self.stop_event: threading.Event | None = None
         self.current_tool = ""
         self.clients: list[queue.Queue[dict]] = []
         self.history: list[dict] = []
@@ -69,7 +83,14 @@ class AppState:
 
     def running(self) -> bool:
         with self.lock:
-            return self.process is not None and self.process.poll() is None
+            return self.worker is not None and self.worker.is_alive()
+
+    def clear_worker(self, worker: threading.Thread):
+        with self.lock:
+            if self.worker is worker:
+                self.worker = None
+                self.stop_event = None
+                self.current_tool = ""
 
 
 STATE = AppState()
@@ -91,64 +112,21 @@ def read_body(handler: BaseHTTPRequestHandler) -> dict:
     return json.loads(handler.rfile.read(length).decode("utf-8"))
 
 
-def command_for(tool: str, payload: dict) -> list[str]:
-    if tool not in TOOLS:
-        raise ValueError("Unknown tool")
+def worker_main(tool: str, interface: str, stop_event: threading.Event):
+    worker = threading.current_thread()
+    code = 0
 
-    spec = TOOLS[tool]
-    binary = BIN_DIR / tool
-    if not binary.exists():
-        raise ValueError(f"Binary not found: {binary}")
-
-    command = [str(binary)]
-
-    interface = str(payload.get("interface", "")).strip()
-    if spec.get("interface"):
-        if not interface:
-            raise ValueError("Interface is required")
-        command += ["--interface", interface]
-
-    for field in spec.get("fields", []):
-        value = str(payload.get(field, "")).strip()
-        if not value:
-            raise ValueError(f"{field} is required")
-        command += [f"--{field}", value]
-
-    if shutil.which("stdbuf"):
-        command = ["stdbuf", "-oL", "-eL", *command]
-
-    return command
-
-
-def stream_process_output(process: subprocess.Popen[str], tool: str):
-    assert process.stdout is not None
-
-    for line in process.stdout:
-        STATE.broadcast({"type": "log", "tool": tool, "text": line})
-
-    code = process.wait()
-    STATE.broadcast({"type": "exit", "tool": tool, "code": code, "text": f"[exit code {code}]\n"})
-
-    with STATE.lock:
-        if STATE.process is process:
-            STATE.process = None
-            STATE.current_tool = ""
-
-
-def list_interfaces() -> list[str]:
     try:
-        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True, check=False)
-    except OSError:
-        return []
-
-    names: list[str] = []
-    for line in result.stdout.splitlines():
-        parts = line.split(":", 2)
-        if len(parts) >= 2:
-            name = parts[1].strip()
-            if name:
-                names.append(name)
-    return names
+        for line in run_tool(tool, interface, stop_event):
+            if not line.endswith("\n"):
+                line += "\n"
+            STATE.broadcast({"type": "log", "tool": tool, "text": line})
+    except Exception as exc:
+        code = 1
+        STATE.broadcast({"type": "log", "tool": tool, "text": f"[error] {exc}\n"})
+    finally:
+        STATE.broadcast({"type": "exit", "tool": tool, "code": code, "text": f"[exit code {code}]\n"})
+        STATE.clear_worker(worker)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -167,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/tools":
             json_response(self, 200, TOOLS)
         elif path == "/api/interfaces":
-            json_response(self, 200, {"interfaces": list_interfaces()})
+            json_response(self, 200, {"interfaces": interface_names()})
         elif path == "/api/status":
             json_response(self, 200, {"running": STATE.running(), "tool": STATE.current_tool})
         elif path == "/api/events":
@@ -184,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/stop":
                 self.handle_stop()
             elif path == "/api/kill":
-                self.handle_kill()
+                self.handle_stop()
             else:
                 json_response(self, 404, {"error": "Not found"})
         except ValueError as exc:
@@ -229,65 +207,44 @@ class Handler(BaseHTTPRequestHandler):
     def handle_run(self):
         payload = read_body(self)
         tool = str(payload.get("tool", "")).strip()
-        command = command_for(tool, payload)
+        if tool not in TOOLS:
+            raise ValueError("Unknown tool")
+
+        spec = TOOLS[tool]
+        interface = str(payload.get("interface", "")).strip()
+        if spec.get("interface") and not interface:
+            raise ValueError("Interface is required")
 
         with STATE.lock:
-            if STATE.process is not None and STATE.process.poll() is None:
+            if STATE.worker is not None and STATE.worker.is_alive():
                 raise ValueError(f"Tool already running: {STATE.current_tool}")
 
-            process = subprocess.Popen(
-                command,
-                cwd=str(BIN_DIR),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
-            )
-            STATE.process = process
+            stop_event = threading.Event()
+            worker = threading.Thread(target=worker_main, args=(tool, interface, stop_event), daemon=True)
+            STATE.worker = worker
+            STATE.stop_event = stop_event
             STATE.current_tool = tool
+            worker.start()
 
-        STATE.broadcast({"type": "start", "tool": tool, "text": "$ " + " ".join(command) + "\n"})
-        threading.Thread(target=stream_process_output, args=(process, tool), daemon=True).start()
+        command = f"python3 -m wiredlab.cli {tool.replace('_', '-')} --interface {interface}"
+        if tool == "routes":
+            command = "python3 -m wiredlab.cli routes"
+        STATE.broadcast({"type": "start", "tool": tool, "text": "$ " + command + "\n"})
         json_response(self, 200, {"ok": True, "tool": tool})
 
     def handle_stop(self):
         with STATE.lock:
-            process = STATE.process
+            stop_event = STATE.stop_event
+            current_tool = STATE.current_tool
+            running = STATE.worker is not None and STATE.worker.is_alive()
 
-        if process is None or process.poll() is not None:
-            json_response(self, 200, {"ok": True, "running": False})
-            return
+        if stop_event is not None:
+            stop_event.set()
 
-        try:
-            if process.stdin:
-                process.stdin.write("\n")
-                process.stdin.flush()
-        except OSError:
-            pass
+        if running:
+            STATE.broadcast({"type": "log", "tool": current_tool, "text": "[stop requested]\n"})
 
-        STATE.broadcast({"type": "log", "tool": STATE.current_tool, "text": "[stop requested]\n"})
-        json_response(self, 200, {"ok": True, "running": True})
-
-    def handle_kill(self):
-        with STATE.lock:
-            process = STATE.process
-
-        if process is None or process.poll() is not None:
-            json_response(self, 200, {"ok": True, "running": False})
-            return
-
-        try:
-            if hasattr(os, "killpg"):
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-            else:
-                process.terminate()
-        except OSError:
-            pass
-
-        STATE.broadcast({"type": "log", "tool": STATE.current_tool, "text": "[terminate requested]\n"})
-        json_response(self, 200, {"ok": True, "running": True})
+        json_response(self, 200, {"ok": True, "running": running})
 
 
 def main():

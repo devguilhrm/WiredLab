@@ -1,31 +1,21 @@
 # WiredLab
 
-WiredLab e um projeto de monitoramento de rede para Linux/Ubuntu Server. Ele foi pensado para rodar em um home server fisico e mostrar, pelo navegador, dispositivos IPv4/IPv6 encontrados na rede e requisicoes DNS visiveis em tempo real.
+WiredLab e um dashboard Python para monitoramento de rede em Linux/Ubuntu Server. Ele mostra dispositivos IPv4/IPv6 encontrados na rede e requisicoes DNS visiveis em tempo real pelo navegador.
 
-O foco atual do sistema e simples:
+O projeto agora e Python-only: nao usa C++, CMake nem binarios em `Bin/`.
 
-- descobrir hosts IPv4 com ARP;
-- descobrir hosts IPv6 com ICMPv6;
-- acompanhar requisicoes DNS em tempo real;
-- filtrar eventos por dispositivo, IP, MAC, dominio ou texto;
-- consultar rotas e interfaces pelo Netlink do Linux.
+## Funcoes
+
+| Funcao no web app | Modulo Python | O que faz |
+| --- | --- | --- |
+| ARP Scan | `wiredlab.scanners.arp` | Varre a rede IPv4 local e mostra IP, MAC, hostname/PTR quando disponivel e fabricante do MAC. |
+| ICMPv6 Scan | `wiredlab.scanners.icmp6` | Descobre hosts IPv6 no link local usando ICMPv6 multicast. |
+| DNS Monitor All Devices | `wiredlab.scanners.dns` | Captura requisicoes DNS visiveis na interface e mostra origem, MAC, transporte e dominio. |
+| Network Routes | `wiredlab.scanners.routes` | Lista interfaces, enderecos e rotas usando os comandos `ip`. |
 
 > Use somente em redes proprias, laboratorios ou ambientes onde voce tem autorizacao. Nao exponha o dashboard diretamente para a internet.
 
-## Status do projeto
-
-Este repositorio foi ajustado para manter no dashboard web apenas as funcoes funcionais:
-
-| Funcao no web app | Binario | O que faz |
-| --- | --- | --- |
-| ARP Scan | `arp_scan` | Varre a rede IPv4 local e mostra IP, MAC, hostname/PTR quando disponivel e fabricante do MAC. |
-| ICMPv6 Scan | `icmp6_scan` | Descobre hosts IPv6 no link local usando ICMPv6 multicast. |
-| DNS Monitor All Devices | `dns_monitor` | Captura requisicoes DNS visiveis na interface e mostra origem, MAC, transporte e dominio. |
-| Network Routes | `netlink` | Lista informacoes de rede, rotas, interfaces e enderecos pelo kernel Linux. |
-
-Existem outros arquivos C++ no repositorio como codigo de estudo/laboratorio, mas eles nao sao expostos no dashboard principal.
-
-## Importante sobre o DNS Monitor
+## Limite importante do DNS Monitor
 
 O monitor DNS so enxerga trafego que passa pela interface do servidor.
 
@@ -37,24 +27,22 @@ Para ver requisicoes DNS de todos os dispositivos da rede, o servidor precisa es
 - o switch/roteador envia uma copia do trafego por port mirror;
 - os clientes nao estao usando DNS criptografado como DoH/DoT fora do caminho monitorado.
 
-Se o dashboard abrir mas o DNS Monitor ficar vazio, normalmente o problema nao e o codigo: o trafego DNS provavelmente nao esta passando pela interface monitorada.
+Se o dashboard abrir mas o DNS Monitor ficar vazio, normalmente o trafego DNS nao esta passando pela interface monitorada.
 
 ## Requisitos
 
 - Ubuntu Server ou outra distribuicao Linux.
-- `git`
-- `g++`
-- `cmake`
-- `python3`
-- `libcurl4-openssl-dev`
-- `libcap2-bin`
-- Acesso `sudo` para configurar capabilities dos binarios.
+- Python 3.10 ou superior.
+- `python3-venv`
+- `python3-pip`
+- `iproute2`
+- Acesso `sudo` para captura raw de pacotes.
 
-Instalacao dos pacotes no Ubuntu:
+Instale os pacotes base:
 
 ```bash
 sudo apt update
-sudo apt install -y git g++ cmake python3 libcurl4-openssl-dev libcap2-bin
+sudo apt install -y git python3 python3-venv python3-pip iproute2
 ```
 
 ## Instalacao
@@ -66,29 +54,27 @@ git clone https://github.com/devguilhrm/WiredLab.git
 cd WiredLab
 ```
 
-Compile os binarios:
+Crie o ambiente Python:
 
 ```bash
-cmake -S . -B build
-cmake --build build
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
-
-Os executaveis sao gerados em `Bin/`.
-
-Configure as permissoes para executar os binarios sem precisar logar como `root`:
-
-```bash
-sudo bash ./scripts/install_privileges.sh sudo
-```
-
-O script aplica capabilities nos binarios funcionais para permitir captura e envio de pacotes de rede.
 
 ## Executando o dashboard web
 
-Em servidor sem interface grafica, use o dashboard web:
+Como ARP, ICMPv6 e DNS monitor usam pacotes raw, rode o servidor com `sudo`:
 
 ```bash
-nohup python3 web/server.py --host 0.0.0.0 --port 8080 > wiredlab-web.log 2>&1 &
+sudo .venv/bin/python web/server.py --host 0.0.0.0 --port 8080
+```
+
+Para deixar rodando em segundo plano:
+
+```bash
+nohup sudo .venv/bin/python web/server.py --host 0.0.0.0 --port 8080 > wiredlab-web.log 2>&1 &
 ```
 
 Depois acesse no navegador de outro computador da mesma rede:
@@ -109,12 +95,6 @@ Para conferir o IP do servidor:
 ip addr
 ```
 
-Para conferir se o servidor web esta ouvindo na porta 8080:
-
-```bash
-ss -ltnp | grep 8080
-```
-
 Se o firewall UFW estiver ativo:
 
 ```bash
@@ -125,43 +105,47 @@ sudo ufw status
 ## Como usar
 
 1. Abra o dashboard web.
-2. Escolha a interface de rede correta, por exemplo `wlp1s0`, `enp2s0`, `eth0` ou outra mostrada por `ip addr`.
+2. Escolha a interface correta, por exemplo `wlp1s0`, `enp2s0`, `eth0` ou outra mostrada por `ip addr`.
 3. Clique em `ARP Scan` para listar dispositivos IPv4 conectados na rede local.
 4. Clique em `ICMPv6 Scan` para procurar dispositivos IPv6 no link local.
 5. Clique em `DNS Monitor All Devices` para acompanhar requisicoes DNS em tempo real.
 6. Use o campo de filtro para procurar por IP, MAC, hostname, dominio ou fabricante.
-7. Clique em `Network Routes` para ver informacoes de rotas e interfaces.
+7. Clique em `Network Routes` para ver interfaces e rotas.
 
-## Execucao manual dos binarios
+## Execucao manual
 
-Tambem e possivel executar as ferramentas diretamente pelo terminal:
+Tambem e possivel usar a CLI Python diretamente:
 
 ```bash
-sudo ./Bin/arp_scan --interface wlp1s0
-sudo ./Bin/icmp6_scan --interface wlp1s0
-sudo ./Bin/dns_monitor --interface wlp1s0
-./Bin/netlink
+sudo .venv/bin/python -m wiredlab.cli arp-scan --interface wlp1s0
+sudo .venv/bin/python -m wiredlab.cli icmp6-scan --interface wlp1s0
+sudo .venv/bin/python -m wiredlab.cli dns-monitor --interface wlp1s0
+.venv/bin/python -m wiredlab.cli routes
 ```
 
 Substitua `wlp1s0` pela interface real do seu servidor.
 
-## Estrutura do projeto
+## Estrutura
 
 ```text
 .
-|-- Include/              # Headers compartilhados
-|-- Source/               # Implementacoes compartilhadas
-|-- scripts/              # Scripts de permissao e suporte
-|-- web/                  # Dashboard web
-|   |-- server.py         # Servidor HTTP/API
-|   |-- index.html        # Interface principal
-|   `-- static/           # JS e CSS
-|-- tools/                # Ferramentas auxiliares
-|-- CMakeLists.txt        # Build CMake
-|-- arp_scan.cpp          # Scan IPv4 por ARP
-|-- icmp6_scan.cpp        # Scan IPv6 por ICMPv6
-|-- dns_monitor.cpp       # Monitor DNS em tempo real
-`-- netlink.cpp           # Diagnostico Netlink
+|-- requirements.txt
+|-- wiredlab/
+|   |-- cli.py
+|   |-- hostname.py
+|   |-- interfaces.py
+|   |-- vendor.py
+|   `-- scanners/
+|       |-- arp.py
+|       |-- dns.py
+|       |-- icmp6.py
+|       `-- routes.py
+`-- web/
+    |-- server.py
+    |-- index.html
+    `-- static/
+        |-- app.js
+        `-- styles.css
 ```
 
 ## Solucao de problemas
@@ -180,12 +164,6 @@ Verifique o log:
 tail -f wiredlab-web.log
 ```
 
-Libere a porta no UFW:
-
-```bash
-sudo ufw allow 8080/tcp
-```
-
 Use o IP real do servidor, nao `127.0.0.1`, quando estiver acessando de outro computador.
 
 ### Porta 8080 ja esta em uso
@@ -202,19 +180,12 @@ Finalize o servidor antigo:
 pkill -f 'web/server.py'
 ```
 
-Inicie novamente:
+### Erro de permissao
+
+Se aparecer erro de permissao, execute com `sudo`:
 
 ```bash
-nohup python3 web/server.py --host 0.0.0.0 --port 8080 > wiredlab-web.log 2>&1 &
-```
-
-### Erro "Operation not permitted"
-
-Recompile e aplique as capabilities novamente:
-
-```bash
-cmake --build build
-sudo bash ./scripts/install_privileges.sh sudo
+sudo .venv/bin/python web/server.py --host 0.0.0.0 --port 8080
 ```
 
 ### Interface invalida
@@ -225,11 +196,7 @@ Liste as interfaces:
 ip addr
 ```
 
-Use uma interface ativa, com `UP` e endereco IP. Exemplo:
-
-```bash
-sudo ./Bin/arp_scan --interface wlp1s0
-```
+Use uma interface ativa, com `UP` e endereco IP.
 
 ### Hostname nao aparece
 
@@ -241,7 +208,7 @@ Confirme que o servidor consegue enxergar o trafego DNS dos clientes. Em uma red
 
 ## Seguranca
 
-O dashboard executa ferramentas de baixo nivel e deve ficar restrito a rede local confiavel.
+O dashboard executa captura de rede e deve ficar restrito a rede local confiavel.
 
 Recomendacoes:
 
