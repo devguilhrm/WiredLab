@@ -36,7 +36,7 @@ const char* sprint_ipv6(const void* data){
 
 
 const char* sprint_string(const uint8_t* data,size_t len){
-	snprintf(_buffer,sizeof(_buffer),"%.*s",len,data);
+	snprintf(_buffer,sizeof(_buffer),"%.*s",(int)len,data);
 	return _buffer;
 }
 

@@ -22,7 +22,7 @@ const char* sprint_ipv4(const void* data);
 
 const char* sprint_ipv6(const void* data);
 
-const char* sprint_string(const uint8_t* data,int len);
+const char* sprint_string(const uint8_t* data,size_t len);
 
 const char* sprint_ip_protocol(uint8_t protocol);
 

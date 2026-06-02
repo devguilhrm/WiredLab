@@ -10,16 +10,21 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "Bin"
+
+HOST_RE = re.compile(r"IP:\s+([0-9a-fA-F:.]+)\s+MAC:\s+([0-9a-fA-F:-]{17})(?:\s+Vendor:\s+(.+))?")
+DNS_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9_-]+\.)+[A-Za-z]{2,}\.?$")
 
 
 class ProcessRunner:
@@ -91,7 +96,7 @@ class NetworkGui(tk.Tk):
 
         self.interface_var = tk.StringVar()
         self.bin_dir_var = tk.StringVar(value=str(BIN_DIR))
-        self.auth_var = tk.BooleanVar(value=True)
+        self.auth_var = tk.BooleanVar(value=False)
 
         self.gateway4_var = tk.StringVar()
         self.host4_var = tk.StringVar()
@@ -100,6 +105,16 @@ class NetworkGui(tk.Tk):
         self.mac_var = tk.StringVar()
 
         self.status_var = tk.StringVar(value="Idle")
+        self.host_count_var = tk.StringVar(value="0")
+        self.dns_count_var = tk.StringVar(value="0")
+        self.run_count_var = tk.StringVar(value="0")
+        self.alert_count_var = tk.StringVar(value="0")
+
+        self.current_tool = ""
+        self.hosts_seen: set[tuple[str, str]] = set()
+        self.dns_seen: set[str] = set()
+        self.run_count = 0
+        self.alert_count = 0
 
         self.configure_style()
         self.build_layout()
@@ -119,6 +134,8 @@ class NetworkGui(tk.Tk):
         style.configure("TEntry", padding=5)
         style.configure("TNotebook", background="#f5f7f8")
         style.configure("TNotebook.Tab", padding=(14, 8))
+        style.configure("Treeview", rowheight=26)
+        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
 
     def build_layout(self):
         root = ttk.Frame(self, padding=18)
@@ -144,7 +161,7 @@ class NetworkGui(tk.Tk):
 
         self.field(settings, "Interface", self.interface_var, 0, 0, width=20)
         self.field(settings, "Binarios", self.bin_dir_var, 0, 2, width=48)
-        ttk.Checkbutton(settings, text="Autenticacao via pkexec", variable=self.auth_var).grid(
+        ttk.Checkbutton(settings, text="Elevar via pkexec", variable=self.auth_var).grid(
             row=0, column=4, padx=(16, 0), sticky=tk.W
         )
         ttk.Button(settings, text="Atualizar interfaces", command=self.load_interfaces).grid(
@@ -161,6 +178,7 @@ class NetworkGui(tk.Tk):
         body.add(right, weight=2)
 
         self.build_tabs(left)
+        self.build_dashboard(right)
         self.build_console(right)
 
         ttk.Label(root, textvariable=self.status_var, style="Muted.TLabel").pack(anchor=tk.W, pady=(10, 0))
@@ -263,6 +281,55 @@ class NetworkGui(tk.Tk):
         )
         self.output.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
+    def build_dashboard(self, parent):
+        dashboard = ttk.Frame(parent, style="Panel.TFrame", padding=10)
+        dashboard.pack(fill=tk.BOTH, expand=False, pady=(0, 10))
+
+        toolbar = ttk.Frame(dashboard, style="Panel.TFrame")
+        toolbar.pack(fill=tk.X)
+        ttk.Label(toolbar, text="Dashboard", style="Panel.TLabel").pack(side=tk.LEFT)
+        ttk.Button(toolbar, text="Limpar dashboard", command=self.clear_dashboard).pack(side=tk.RIGHT)
+
+        metrics = ttk.Frame(dashboard, style="Panel.TFrame")
+        metrics.pack(fill=tk.X, pady=(10, 8))
+
+        self.metric_card(metrics, "Hosts", self.host_count_var, 0)
+        self.metric_card(metrics, "DNS", self.dns_count_var, 1)
+        self.metric_card(metrics, "Execucoes", self.run_count_var, 2)
+        self.metric_card(metrics, "Alertas", self.alert_count_var, 3)
+
+        table_frame = ttk.Frame(dashboard, style="Panel.TFrame")
+        table_frame.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("kind", "target", "mac", "vendor", "source", "time")
+        self.events = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
+        self.events.heading("kind", text="Tipo")
+        self.events.heading("target", text="IP/Dominio")
+        self.events.heading("mac", text="MAC")
+        self.events.heading("vendor", text="Vendor/Info")
+        self.events.heading("source", text="Fonte")
+        self.events.heading("time", text="Hora")
+
+        self.events.column("kind", width=82, minwidth=72, stretch=False)
+        self.events.column("target", width=190, minwidth=140)
+        self.events.column("mac", width=130, minwidth=120, stretch=False)
+        self.events.column("vendor", width=220, minwidth=140)
+        self.events.column("source", width=110, minwidth=90, stretch=False)
+        self.events.column("time", width=86, minwidth=76, stretch=False)
+
+        self.events.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.events.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.events.configure(yscrollcommand=scrollbar.set)
+
+    def metric_card(self, parent, label, variable, column):
+        frame = ttk.Frame(parent, style="Panel.TFrame", padding=10)
+        frame.grid(row=0, column=column, sticky=tk.EW, padx=(0 if column == 0 else 8, 0))
+        parent.columnconfigure(column, weight=1)
+
+        ttk.Label(frame, text=label, style="Panel.TLabel").pack(anchor=tk.W)
+        ttk.Label(frame, textvariable=variable, style="Panel.TLabel", font=("Segoe UI", 20, "bold")).pack(anchor=tk.W)
+
     def interface(self) -> str:
         return self.interface_var.get().strip()
 
@@ -297,10 +364,16 @@ class NetworkGui(tk.Tk):
             return
 
         command = self.command_with_auth([str(binary), *args])
-        self.start_command(command, BIN_DIR)
+        self.start_command(command, BIN_DIR, name)
 
-    def start_command(self, command: list[str], cwd: Path):
+    def start_command(self, command: list[str], cwd: Path, tool_name: str = "build"):
         try:
+            self.current_tool = tool_name
+            self.run_count += 1
+            self.run_count_var.set(str(self.run_count))
+            if tool_name in {"arp_spoofing", "ndp_spoofing", "dhcp"}:
+                self.alert_count += 1
+                self.alert_count_var.set(str(self.alert_count))
             self.append_output("$ " + " ".join(command) + "\n")
             self.runner.start(command, cwd)
             self.status_var.set("Running")
@@ -309,14 +382,14 @@ class NetworkGui(tk.Tk):
 
     def run_build(self):
         command = ["cmake", "-S", str(ROOT), "-B", str(ROOT / "build")]
-        self.start_command(command, ROOT)
+        self.start_command(command, ROOT, "build")
         self.after(1500, self.run_build_step_2)
 
     def run_build_step_2(self):
         if self.runner.running():
             self.after(1000, self.run_build_step_2)
             return
-        self.start_command(["cmake", "--build", str(ROOT / "build")], ROOT)
+        self.start_command(["cmake", "--build", str(ROOT / "build")], ROOT, "build")
 
     def run_arp_spoofing(self):
         args = ["--interface", self.interface(), "--gateway", self.gateway4_var.get().strip(), "--host", self.host4_var.get().strip()]
@@ -357,6 +430,7 @@ class NetworkGui(tk.Tk):
     def append_output(self, text: str):
         self.output.insert(tk.END, text)
         self.output.see(tk.END)
+        self.parse_output(text)
 
     def append_output_threadsafe(self, text: str):
         self.after(0, self.append_output, text)
@@ -367,6 +441,56 @@ class NetworkGui(tk.Tk):
     def process_finished(self, code: int):
         self.status_var.set(f"Finished with exit code {code}")
         self.append_output(f"\n[exit code {code}]\n")
+        self.current_tool = ""
+
+    def clear_dashboard(self):
+        self.hosts_seen.clear()
+        self.dns_seen.clear()
+        self.run_count = 0
+        self.alert_count = 0
+        self.host_count_var.set("0")
+        self.dns_count_var.set("0")
+        self.run_count_var.set("0")
+        self.alert_count_var.set("0")
+        for item in self.events.get_children():
+            self.events.delete(item)
+
+    def parse_output(self, text: str):
+        for raw_line in text.replace("\r", "\n").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("$ ") or line.startswith("[exit code"):
+                continue
+
+            host_match = HOST_RE.search(line)
+            if host_match:
+                ip, mac, vendor = host_match.groups()
+                self.record_host(ip, mac, vendor or "")
+                continue
+
+            if self.current_tool == "dns_scan" and DNS_RE.match(line):
+                self.record_dns(line)
+
+    def record_host(self, ip: str, mac: str, vendor: str):
+        key = (ip, mac.lower())
+        if key in self.hosts_seen:
+            return
+
+        self.hosts_seen.add(key)
+        self.host_count_var.set(str(len(self.hosts_seen)))
+        self.add_event("Host", ip, mac, vendor, self.current_tool or "scan")
+
+    def record_dns(self, domain: str):
+        normalized = domain.rstrip(".").lower()
+        if normalized in self.dns_seen:
+            return
+
+        self.dns_seen.add(normalized)
+        self.dns_count_var.set(str(len(self.dns_seen)))
+        self.add_event("DNS", normalized, "", "query", "dns_scan")
+
+    def add_event(self, kind: str, target: str, mac: str, vendor: str, source: str):
+        now = datetime.now().strftime("%H:%M:%S")
+        self.events.insert("", 0, values=(kind, target, mac, vendor, source, now))
 
     def load_interfaces(self):
         if os.name != "posix":

@@ -25,6 +25,7 @@ Este projeto serve como um laboratorio de redes em C++ para:
 |-- Include/              # Headers de pacotes, filtros, utilitarios e DHCP starvation
 |-- Source/               # Implementacoes compartilhadas
 |-- Bin/                  # Binarios Linux ja gerados e arquivos de clientes DHCP
+|-- scripts/              # Scripts de permissao/operacao no Linux
 |-- tools/                # Interface grafica e utilitarios de operacao
 |-- CMakeLists.txt        # Build centralizado do projeto
 |-- *_scan.cpp            # Ferramentas de varredura/captura
@@ -59,20 +60,21 @@ O projeto agora esta organizado em tres camadas:
 - Ferramentas: cada arquivo `*.cpp` na raiz e um executavel pequeno que usa o nucleo para uma tarefa especifica.
 - Orquestracao: `CMakeLists.txt` compila todos os executaveis e `tools/network_gui.py` fornece uma interface grafica para configurar parametros, executar binarios e acompanhar a saida.
 
-O header `Include/CLI.h` centraliza leitura de argumentos como `--interface`, `--gateway`, `--host` e `--mac`. Com isso, as ferramentas continuam funcionando em modo interativo, mas tambem podem ser chamadas por scripts ou pela GUI.
+O header `Include/CLI.h` centraliza leitura de argumentos como `--interface`, `--gateway`, `--host` e `--mac`. Com isso, as ferramentas continuam funcionando em modo interativo, mas tambem podem ser chamadas por scripts ou pela GUI. A GUI tambem possui um dashboard que transforma parte da saida textual dos binarios em indicadores e eventos tabulares.
 
 ## Requisitos
 
 - Linux. Os headers e chamadas usadas sao especificos de Linux (`linux/if_packet.h`, `linux/filter.h`, `linux/rtnetlink.h`).
-- Permissao de root ou capacidades equivalentes para sockets raw/packet.
+- Permissao de root, `sudo` ou capabilities equivalentes para sockets raw/packet.
 - `g++` com suporte a C++17.
 - `libcurl` para `arp_scan` e `icmp6_scan`.
+- `libcap2-bin` para configurar execucao por grupo sem login direto como root.
 
 Exemplo em Debian/Ubuntu:
 
 ```bash
 sudo apt update
-sudo apt install g++ libcurl4-openssl-dev
+sudo apt install g++ cmake libcurl4-openssl-dev libcap2-bin
 ```
 
 No Windows, use uma maquina Linux, VM ou ambiente equivalente. WSL pode ter limitacoes para trafego raw/packet em interfaces fisicas.
@@ -117,7 +119,12 @@ Quando o arquivo usa `DHCP_Starvation.h`, adicione `Source/DHCP_Starvation.cpp` 
 
 ## Uso
 
-A maioria das ferramentas precisa ser executada como root:
+A maioria das ferramentas precisa de privilegios de rede. Existem duas formas recomendadas:
+
+1. Executar com `sudo`, para usuarios que tenham permissao no `sudoers`, por exemplo `admin ALL=(ALL:ALL) ALL`.
+2. Configurar os binarios uma vez com capabilities, permitindo que usuarios de um grupo autorizado executem sem abrir sessao como `root`.
+
+Com `sudo`:
 
 ```bash
 sudo ./Bin/arp_scan --interface eth0
@@ -125,6 +132,22 @@ sudo ./Bin/icmp6_scan --interface eth0
 sudo ./Bin/dns_scan --interface eth0 --mac aa-bb-cc-dd-ee-ff
 sudo ./Bin/arp_spoofing --interface eth0 --gateway 192.168.1.1 --host 192.168.1.20
 ```
+
+Com grupo autorizado e capabilities:
+
+```bash
+sudo bash ./scripts/install_privileges.sh admin
+./Bin/arp_scan --interface eth0
+```
+
+Se a sua distribuicao usa o grupo `sudo` ou `wheel`, troque o argumento:
+
+```bash
+sudo bash ./scripts/install_privileges.sh sudo
+sudo bash ./scripts/install_privileges.sh wheel
+```
+
+O script aplica `cap_net_raw`, `cap_net_admin` e `cap_net_bind_service` aos binarios em `Bin/`, restringe a execucao ao grupo escolhido e deixa `Bin/Clients` gravavel pelo grupo. Se um usuario acabou de entrar no grupo, ele precisa sair e entrar novamente na sessao.
 
 As ferramentas interativas pedem dados como nome da interface, IP do gateway, IP do host ou MAC alvo. Para descobrir o nome da interface:
 
@@ -148,11 +171,18 @@ Na interface grafica voce pode:
 - Rodar o build CMake.
 - Informar a interface de rede.
 - Executar ARP scan, ICMPv6 scan, DNS scan e Netlink.
+- Acompanhar dashboard com contadores de hosts, consultas DNS, execucoes e alertas.
+- Ver tabela de eventos com IP/dominio, MAC, fabricante/informacao, fonte e horario.
 - Preencher gateway/host para ARP spoofing ou NDP spoofing.
 - Executar demonstracoes DHCP/DHCPv6.
 - Acompanhar a saida em tempo real e parar processos longos.
 
-Para comandos que exigem privilegio, a GUI tenta usar `pkexec` quando a opcao de autenticacao esta ativa. Se `pkexec` nao estiver disponivel, execute os binarios manualmente com `sudo` ou rode a GUI em um ambiente com permissao adequada.
+Para comandos que exigem privilegio, ha duas opcoes:
+
+- Rodar `sudo bash ./scripts/install_privileges.sh admin` antes e deixar a opcao `Elevar via pkexec` desmarcada.
+- Marcar `Elevar via pkexec` para a GUI pedir autenticacao grafica antes de executar os binarios.
+
+Se `pkexec` nao estiver disponivel, execute os binarios manualmente com `sudo` ou configure capabilities com o script acima.
 
 ## Arquivos de clientes DHCP
 
@@ -178,4 +208,3 @@ Os binarios existentes estao em `Bin/`, mas o codigo usa caminhos relativos como
 - `Include/Filter.h`: offsets e macros para filtros BPF.
 - `Include/Utils.h` e `Source/Utils.cpp`: descoberta de interface via Netlink, formatacao de IP/MAC e utilitarios de console.
 - `Include/DHCP_Starvation.h` e `Source/DHCP_Starvation.cpp`: logica de DHCP Discover/Offer/Request/Ack e persistencia de clientes.
-# WiredLab
